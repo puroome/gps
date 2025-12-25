@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 - 실시간 위치 모니터링</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; text-align: center; padding: 20px; color: #333; background-color: #f4f6f8; }
+        
+        .card {
+            background: white; padding: 40px; border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: inline-block; max-width: 600px; width: 100%;
+        }
+
+        h2 { color: #d93025; margin-bottom: 5px; }
+        p.sub-text { color: #666; font-size: 0.9em; margin-bottom: 30px; }
+
+        /* 결과 주소 스타일 (마우스 올리면 커서 변경) */
+        #result-container { margin-top: 10px; }
+        .address-text {
+            font-size: 1.5em; font-weight: bold; color: #2c3e50;
+            text-decoration: underline; text-decoration-style: dotted;
+            cursor: help; position: relative; display: inline-block;
+            padding: 5px;
+        }
+        .time-text { color: #888; margin-top: 10px; font-size: 0.9em; }
+
+        /* 팝업 지도 스타일 */
+        #map-tooltip {
+            display: none;
+            position: absolute;
+            width: 350px; height: 250px;
+            top: 100%; left: 50%;
+            transform: translateX(-50%);
+            border: 2px solid #4285F4; border-radius: 10px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            z-index: 1000;
+            margin-top: 15px;
+            background: white;
+        }
+        
+        /* 툴팁 화살표 */
+        #map-tooltip::after {
+            content: ""; position: absolute; bottom: 100%; left: 50%; margin-left: -10px;
+            border-width: 10px; border-style: solid; border-color: transparent transparent #4285F4 transparent;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>🛠️ 관리자 모니터링</h2>
+        <p class="sub-text">가장 최근에 저장된 위치가 실시간으로 표시됩니다.</p>
+
+        <div id="result-container">
+            <p>최근 저장 위치 (마우스를 올려보세요):</p>
+            
+            <div style="position: relative; display: inline-block;">
+                <span id="address-display" class="address-text" onmouseenter="showMap()" onmouseleave="hideMap()">
+                    데이터를 기다리는 중...
+                </span>
+                
+                <div id="map-tooltip">
+                    <div id="map" style="width: 100%; height: 100%; border-radius: 8px;"></div>
+                </div>
+            </div>
+            
+            <div id="timestamp-display" class="time-text">-</div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, query, limitToLast, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB-qu7Z0v_ygNbiKzT7tt6Byigp_AGcdPo",
+            authDomain: "gps1-cf085.firebaseapp.com",
+            databaseURL: "https://gps1-cf085-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "gps1-cf085",
+            storageBucket: "gps1-cf085.firebasestorage.app",
+            messagingSenderId: "407130432420",
+            appId: "1:407130432420:web:2f78b17a891bce1e6cd731"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // ★ Firebase에서 가장 최근 데이터 1개만 계속 감시(Listen)
+        const lastLocationQuery = query(ref(db, 'locations'), limitToLast(1));
+
+        onValue(lastLocationQuery, (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                // 데이터는 객체 형태(key: value)로 오므로 값을 추출
+                const keys = Object.keys(data);
+                const lastRecord = data[keys[0]];
+
+                updateDashboard(lastRecord);
+            }
+        });
+
+        // 화면 업데이트 함수
+        function updateDashboard(record) {
+            document.getElementById('address-display').innerText = record.address;
+            document.getElementById('timestamp-display').innerText = "저장 일시: " + record.timestamp;
+
+            // 전역 변수에 좌표 저장 (지도가 쓸 수 있게)
+            window.targetLat = record.latitude;
+            window.targetLng = record.longitude;
+        }
+    </script>
+
+    <script>
+        // 지도 관련 변수
+        let map = null;
+        // window.targetLat / Lng 는 위의 모듈 스크립트에서 업데이트됩니다.
+
+        // 마우스 올렸을 때
+        function showMap() {
+            // 데이터가 없으면 무시
+            if (!window.targetLat || !window.targetLng) return;
+
+            const tooltip = document.getElementById('map-tooltip');
+            tooltip.style.display = 'block';
+            
+            // 지도 초기화 또는 이동
+            initMap(window.targetLat, window.targetLng);
+            
+            // 지도 사이즈 재조정 (display:none 해제 직후 필수)
+            if (map) {
+                setTimeout(() => map.invalidateSize(), 10);
+            }
+        }
+
+        // 마우스 뗐을 때
+        function hideMap() {
+            document.getElementById('map-tooltip').style.display = 'none';
+        }
+
+        // 지도 그리기 함수
+        function initMap(lat, lng) {
+            if (map) {
+                map.setView([lat, lng], 16);
+                
+                // 기존 마커들 제거
+                map.eachLayer((layer) => {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
+                });
+                L.marker([lat, lng]).addTo(map);
+            } else {
+                map = L.map('map', {
+                    center: [lat, lng],
+                    zoom: 16,
+                    zoomControl: false
+                });
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+
+                L.marker([lat, lng]).addTo(map);
+            }
+        }
+    </script>
+</body>
+</html>
