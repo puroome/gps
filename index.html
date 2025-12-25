@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>위치 저장 및 지도 확인</title>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <title>위치 체크인</title>
     
     <style>
         body { font-family: 'Noto Sans KR', sans-serif; text-align: center; padding: 20px; color: #333; }
@@ -18,63 +16,22 @@
         button:disabled { background-color: #ccc; cursor: not-allowed; }
         button:hover:not(:disabled) { background-color: #3367D6; }
 
-        #status { margin: 20px 0; color: #666; font-size: 0.9em; }
-
-        /* 결과 주소 스타일 (마우스 올리면 커서 변경) */
-        #result-container { margin-top: 30px; display: none; }
-        .address-text {
-            font-size: 1.4em; font-weight: bold; color: #2c3e50;
-            text-decoration: underline; text-decoration-style: dotted;
-            cursor: help; position: relative; display: inline-block;
-        }
-
-        /* 팝업 지도 스타일 */
-        #map-tooltip {
-            display: none; /* 기본 숨김 */
-            position: absolute;
-            width: 300px; height: 200px;
-            top: 100%; left: 50%;
-            transform: translateX(-50%);
-            border: 2px solid #4285F4; border-radius: 10px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-            z-index: 1000;
-            margin-top: 10px;
-            background: white;
-        }
-        
-        /* 툴팁 화살표 */
-        #map-tooltip::after {
-            content: ""; position: absolute; bottom: 100%; left: 50%; margin-left: -10px;
-            border-width: 10px; border-style: solid; border-color: transparent transparent #4285F4 transparent;
-        }
+        #status { margin: 20px 0; color: #666; font-size: 0.9em; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h2>📍 현재 위치 기록 & 확인</h2>
-    <p>버튼을 누르면 시트와 DB에 저장됩니다.</p>
+    <h2>📍 출석/위치 체크인</h2>
+    <p>아래 버튼을 누르면 현재 위치가 저장됩니다.</p>
     
     <button id="checkInBtn" onclick="getLocation()">현재 위치 저장하기</button>
-    <div id="status">준비 완료</div>
-
-    <div id="result-container">
-        <p>저장된 위치 (마우스를 올려보세요):</p>
-        <div style="position: relative; display: inline-block;">
-            <span id="address-display" class="address-text" onmouseenter="showMap()" onmouseleave="hideMap()"></span>
-            
-            <div id="map-tooltip">
-                <div id="map" style="width: 100%; height: 100%; border-radius: 8px;"></div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <div id="status">대기 중...</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // ★ Firebase 설정 (본인 정보로 수정)
+        // ★ Firebase 설정 (기존 정보 유지)
         const firebaseConfig = {
             apiKey: "AIzaSyB-qu7Z0v_ygNbiKzT7tt6Byigp_AGcdPo",
             authDomain: "gps1-cf085.firebaseapp.com",
@@ -88,7 +45,7 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // 전역 함수로 노출
+        // 전역 함수로 노출 (저장 로직)
         window.saveToFirebase = function(lat, lng, address) {
             const newRef = push(ref(db, 'locations'));
             set(newRef, {
@@ -97,24 +54,23 @@
                 address: address,
                 timestamp: new Date().toLocaleString()
             }).then(() => {
-                document.getElementById('status').innerText = "✅ 모든 저장 완료!";
-            }).catch(e => console.error(e));
+                // 저장 완료 후 지도 표시는 하지 않고 메시지만 출력
+                document.getElementById('status').innerText = "✅ 저장 완료되었습니다! (창을 닫으셔도 됩니다)";
+                document.getElementById('checkInBtn').disabled = false; // 버튼 다시 활성화 (필요시)
+            }).catch(e => {
+                console.error(e);
+                document.getElementById('status').innerText = "❌ 저장 실패: " + e.message;
+            });
         };
     </script>
 
     <script>
-        // ★ GAS 웹 앱 URL (배포 후 복사한 주소)
+        // ★ GAS 웹 앱 URL
         const GAS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzT2gSUo2rXDvvksuQUfB35NYe-ZTeHvGFJBbv2vOt2wcOimy0VkePTyOsGT4F0FiSo/exec";
         
-        // 지도 관련 변수
-        let map = null;
-        let currentLat = 0;
-        let currentLng = 0;
-
         function getLocation() {
             const statusDiv = document.getElementById('status');
             const btn = document.getElementById('checkInBtn');
-            const resultContainer = document.getElementById('result-container');
 
             if (!navigator.geolocation) {
                 statusDiv.innerText = "GPS를 지원하지 않는 브라우저입니다.";
@@ -123,38 +79,29 @@
 
             statusDiv.innerText = "📡 위치 파악 중...";
             btn.disabled = true;
-            resultContainer.style.display = 'none'; // 재시도시 결과 숨김
 
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    currentLat = position.coords.latitude;
-                    currentLng = position.coords.longitude;
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
                     
-                    statusDiv.innerText = "🔄 주소 변환 및 시트 저장 중...";
+                    statusDiv.innerText = "🔄 서버 통신 중...";
                     
-                    // GAS 호출
-                    fetch(`${GAS_SCRIPT_URL}?lat=${currentLat}&lng=${currentLng}`)
+                    // GAS 호출 (주소 변환)
+                    fetch(`${GAS_SCRIPT_URL}?lat=${lat}&lng=${lng}`)
                     .then(res => res.json())
                     .then(data => {
                         if(data.result === 'success') {
                             statusDiv.innerText = "💾 DB 저장 중...";
                             
-                            // 1. 화면에 주소 표시
-                            document.getElementById('address-display').innerText = data.address;
-                            resultContainer.style.display = 'block';
-                            
-                            // 2. Firebase 저장
+                            // Firebase 저장 함수 호출
                             if(window.saveToFirebase) {
-                                window.saveToFirebase(currentLat, currentLng, data.address);
+                                window.saveToFirebase(lat, lng, data.address);
                             }
-                            
-                            // 3. 지도 초기화 (데이터가 있을 때 미리 준비)
-                            initMap(currentLat, currentLng);
-                            
                         } else {
                             statusDiv.innerText = "주소 변환 실패: " + (data.error || "알 수 없는 오류");
+                            btn.disabled = false;
                         }
-                        btn.disabled = false;
                     })
                     .catch(err => {
                         console.error(err);
@@ -168,52 +115,6 @@
                 },
                 { enableHighAccuracy: true }
             );
-        }
-
-        // 지도 초기화 함수
-        function initMap(lat, lng) {
-            // 이미 지도가 있으면 좌표만 이동
-            if (map) {
-                map.setView([lat, lng], 16); // 16은 줌 레벨
-                
-                // 기존 마커 제거 후 새로 추가 (간단 구현을 위해)
-                map.eachLayer((layer) => {
-                    if (layer instanceof L.Marker) {
-                        map.removeLayer(layer);
-                    }
-                });
-                L.marker([lat, lng]).addTo(map);
-            } else {
-                // 지도 최초 생성
-                map = L.map('map', {
-                    center: [lat, lng],
-                    zoom: 16,
-                    zoomControl: false // 작은 팝업이라 줌 컨트롤 숨김
-                });
-                
-                // 오픈스트리트맵 타일 사용 (무료)
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(map);
-
-                L.marker([lat, lng]).addTo(map);
-            }
-        }
-
-        // 마우스 올렸을 때
-        function showMap() {
-            const tooltip = document.getElementById('map-tooltip');
-            tooltip.style.display = 'block';
-            
-            // display:none 상태에서는 지도 사이즈 계산이 안되므로, 보여준 직후 사이즈 갱신 필요
-            if (map) {
-                map.invalidateSize();
-            }
-        }
-
-        // 마우스 뗐을 때
-        function hideMap() {
-            document.getElementById('map-tooltip').style.display = 'none';
         }
     </script>
 </body>
