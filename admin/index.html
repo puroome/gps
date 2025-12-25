@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>위치 기록</title>
     <link rel="icon" href="favicon.png" type="image/png">
-  <link rel="manifest" href="manifest.json">
+    <link rel="manifest" href="manifest.json">
     
     <style>
         /* 기본 설정 & 폰트 */
@@ -74,16 +74,16 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
 
-        /* 1. 날짜 버튼 여백 최소화 수정 */
+        /* 날짜 버튼 스타일 */
         .date-inputs { 
             display: flex; 
-            gap: 0px; /* 사이 간격 제거 */
+            gap: 0px; 
             align-items: center; 
             justify-content: center; 
             width: 100%; 
         }
         input[type="date"], input[type="month"] {
-            padding: 10px 2px; /* 좌우 패딩 최소화 */
+            padding: 10px 2px;
             border: 1px solid #ddd;
             border-radius: 8px;
             font-size: 1rem;
@@ -91,10 +91,9 @@
             outline: none;
             background: #fff;
             color: #333;
-            text-align: center; /* 텍스트 중앙 정렬 */
-            width: auto; /* 너비 자동으로 깔끔하게 */
+            text-align: center;
+            width: auto;
         }
-        /* 기간 설정의 물결(~) 간격 조정 */
         .date-inputs span { margin: 0 5px; font-weight: bold; color: #888; }
 
         .search-btn {
@@ -135,53 +134,17 @@
             border-radius: 8px;
             cursor: pointer; 
             line-height: 1.4;
-            display: inline-block; /* 위치 계산을 위해 inline-block 권장 */
-            width: fit-content;    /* 내용만큼만 너비 차지 */
+            display: inline-block;
+            width: fit-content;
+            transition: background 0.2s, color 0.2s;
         }
+        /* 클릭 가능하다는 느낌을 주기 위해 Hover 효과 유지 */
         .item-address:hover { background: #eef4ff; color: #4285F4; }
+        /* 터치했을 때 효과 */
+        .item-address:active { background: #dceaff; }
 
         .no-data { text-align: center; padding: 40px; color: #999; }
 
-        /* 지도 툴팁 (absolute로 변경하여 문서 흐름에 따름) */
-        #map-tooltip {
-            display: none; 
-            position: absolute; /* fixed에서 absolute로 변경 */
-            width: 300px; height: 200px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            z-index: 1000;
-            background: white;
-            overflow: hidden;
-            border: 2px solid white;
-            pointer-events: none; 
-        }
-
-        /* 컨텍스트 메뉴 */
-        #context-menu {
-            display: none;
-            position: absolute; /* fixed에서 absolute로 변경 */
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
-            width: 140px; /* 너비 조금 줄임 */
-            z-index: 2000;
-            overflow: hidden;
-            border: 1px solid #eee;
-        }
-        
-        .menu-item {
-            padding: 12px 16px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            color: #333;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.1s;
-            border-bottom: 1px solid #f5f5f5;
-        }
-        .menu-item:last-child { border-bottom: none; }
-        .menu-item:hover { background-color: #f0f7ff; color: #4285F4; }
     </style>
 </head>
 <body>
@@ -218,21 +181,6 @@
         </ul>
     </div>
 
-    <div id="map-tooltip">
-        <div id="map" style="width: 100%; height: 100%;"></div>
-    </div>
-
-    <div id="context-menu">
-        <div class="menu-item" onclick="openMap('naver')">
-            <span style="color:#2DB400; font-weight:bold;">N</span> 네이버 지도
-        </div>
-        <div class="menu-item" onclick="openMap('kakao')">
-            <span style="color:#F7E600; font-weight:bold; background:#333; padding:0 3px; border-radius:2px;">K</span> 카카오맵
-        </div>
-    </div>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, query, limitToLast, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
@@ -261,9 +209,6 @@
     <script>
         let allData = [];
         let currentMode = 'daily';
-        let map = null;
-        let selectedLat = 0; 
-        let selectedLng = 0;
 
         function startApp() {
             renderInputs();
@@ -273,10 +218,6 @@
                 const data = snapshot.val();
                 allData = data ? Object.values(data) : [];
                 filterAndRender();
-            });
-
-            document.addEventListener('click', function() {
-                document.getElementById('context-menu').style.display = 'none';
             });
         }
 
@@ -353,7 +294,7 @@
 
                     const uniqueId = `addr-${index}-${Date.now()}`;
 
-                    // 스마트폰 원클릭 대응을 위해 onclick에도 showMiniMap 연결
+                    // 변경된 부분: 마우스 오버, 우클릭 등 제거하고 onclick만 남김
                     li.innerHTML = `
                         <div class="item-header">
                             <span class="item-name">${item.name || '이름 없음'}</span>
@@ -361,10 +302,8 @@
                         </div>
                         <div class="item-address" 
                             id="${uniqueId}"
-                            onmouseenter="showMiniMap(event, ${item.latitude}, ${item.longitude})" 
-                            onclick="showMiniMap(event, ${item.latitude}, ${item.longitude})"
-                            onmouseleave="hideMiniMap()"
-                            oncontextmenu="showContextMenu(event, ${item.latitude}, ${item.longitude})">
+                            onclick="openKakaoMap(${item.latitude}, ${item.longitude})"
+                            title="클릭하여 카카오맵 열기">
                             <span style="color:#888;">📍 주소 변환 중... (${item.address || '위치정보'})</span>
                         </div>
                     `;
@@ -398,66 +337,16 @@
             }
         }
 
-        // 2. 우클릭 메뉴 위치 고정 수정
-        window.showContextMenu = function(e, lat, lng) {
-            e.preventDefault(); 
-            e.stopPropagation(); // 버블링 막아서 즉시 닫히지 않게 함
-
-            selectedLat = lat;
-            selectedLng = lng;
-
-            const menu = document.getElementById('context-menu');
-            const target = e.currentTarget; // 이벤트를 발생시킨 요소 (주소 div)
-            const rect = target.getBoundingClientRect();
-
-            // 주소 요소의 왼쪽 아래(bottom-left)에 위치
-            // window.scrollX/Y를 더해서 전체 문서 기준 절대 좌표 계산
-            menu.style.left = (rect.left + window.scrollX) + 'px';
-            menu.style.top = (rect.bottom + window.scrollY) + 'px';
-            menu.style.display = 'block';
-
-            // 미니맵은 숨김 (겹침 방지)
-            hideMiniMap();
-        };
-
-        window.openMap = function(type) {
-            let url = '';
-            if (type === 'naver') {
-                url = `https://map.naver.com/v5/?q=${selectedLat},${selectedLng}`;
-            } else if (type === 'kakao') {
-                url = `https://map.kakao.com/link/map/${selectedLat},${selectedLng}`;
+        // 카카오맵 바로 열기 함수
+        window.openKakaoMap = function(lat, lng) {
+            if (!lat || !lng) {
+                alert('위치 정보가 없습니다.');
+                return;
             }
+            const url = `https://map.kakao.com/link/map/${lat},${lng}`;
             window.open(url, '_blank');
         };
 
-        // 2. 미니맵 위치 고정 수정
-        window.showMiniMap = function(e, lat, lng) {
-            if(document.getElementById('context-menu').style.display === 'block') return;
-
-            const tooltip = document.getElementById('map-tooltip');
-            const target = e.currentTarget; // 주소 div
-            const rect = target.getBoundingClientRect();
-
-            // 주소 요소의 왼쪽 아래에 정확히 고정
-            tooltip.style.left = (rect.left + window.scrollX) + 'px';
-            tooltip.style.top = (rect.bottom + window.scrollY) + 'px';
-            tooltip.style.display = 'block';
-
-            if (map) {
-                map.setView([lat, lng], 16);
-                map.eachLayer(layer => { if (layer instanceof L.Marker) map.removeLayer(layer); });
-                L.marker([lat, lng]).addTo(map);
-                map.invalidateSize();
-            } else {
-                map = L.map('map', { center: [lat, lng], zoom: 16, zoomControl: false, attributionControl: false });
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                L.marker([lat, lng]).addTo(map);
-            }
-        };
-
-        window.hideMiniMap = function() {
-            document.getElementById('map-tooltip').style.display = 'none';
-        };
     </script>
       <script>
     if ('serviceWorker' in navigator) {
