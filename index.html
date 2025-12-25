@@ -30,10 +30,10 @@
     <h2>📍 출석 체크인</h2>
     <p>이름을 입력하고 저장 버튼을 눌러주세요.</p>
     
-    <input type="text" id="username" placeholder="이름 (예: 홍길동)" required>
+    <input type="text" id="username" placeholder="" required>
     <br>
     
-    <button id="checkInBtn" onclick="getLocation()">현재 위치 저장하기</button>
+    <button id="checkInBtn" onclick="getLocation()">출석기</b하u
     <div id="status">대기 중...</div>
 
     <script type="module">
@@ -107,11 +107,11 @@
             const btn = document.getElementById('checkInBtn');
 
             if (!navigator.geolocation) {
-                statusDiv.innerText = "GPS를 지원하지 않는 브라우저입니다.";
+                statusDiv.innerText = "지원하지 않는 브라우저입니다.";
                 return;
             }
 
-            statusDiv.innerText = "📡 위치 파악 중...";
+            statusDiv.innerText = "출석을 기록하는 중...";
             btn.disabled = true; // 중복 클릭 방지
 
             navigator.geolocation.getCurrentPosition(
@@ -127,7 +127,7 @@
                         const key = await window.saveToFirebase(lat, lng, name);
                         
                         // 사용자에게는 바로 성공 메시지 보여줌 (체감 속도 UP)
-                        statusDiv.innerText = `✅ ${name}님, 저장 완료! (주소 확인 중...)`;
+                        statusDiv.innerText = `✅ ${name}님, 출석 완료!`;
                         // 버튼은 계속 비활성화 상태로 두거나, 필요하면 여기서 풀어줘도 됨
                         
                         // [2단계] 백그라운드에서 GAS 호출 (구글 시트 저장 & 주소 변환)
@@ -140,7 +140,7 @@
                                 if(window.updateFirebaseAddress && key) {
                                     window.updateFirebaseAddress(key, data.address);
                                     // 최종 완료 메시지
-                                    statusDiv.innerText = `✅ ${name}님, 저장 완료!`; 
+                                    statusDiv.innerText = `✅ ${name}님, 출석석 완료!`; 
                                 }
                             } else {
                                 console.warn("GAS 저장 실패:", data.error);
