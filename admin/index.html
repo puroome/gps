@@ -3,73 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>관리자 - 실시간 위치 모니터링</title>
-    
+    <title>관리자 모니터링</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; text-align: center; padding: 20px; color: #333; background-color: #f4f6f8; }
-        
-        .card {
-            background: white; padding: 40px; border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: inline-block; max-width: 600px; width: 100%;
+        /* 1. 화면 가로비 꽉 채우기 & 반응형 */
+        body { 
+            font-family: 'Noto Sans KR', sans-serif; 
+            margin: 0; padding: 20px; 
+            background-color: #f4f6f8; 
+            box-sizing: border-box;
         }
 
-        h2 { color: #d93025; margin-bottom: 5px; }
-        p.sub-text { color: #666; font-size: 0.9em; margin-bottom: 30px; }
-
-        /* 결과 주소 스타일 (마우스 올리면 커서 변경) */
-        #result-container { margin-top: 10px; }
-        .address-text {
-            font-size: 1.5em; font-weight: bold; color: #2c3e50;
-            text-decoration: underline; text-decoration-style: dotted;
-            cursor: help; position: relative; display: inline-block;
-            padding: 5px;
-        }
-        .time-text { color: #888; margin-top: 10px; font-size: 0.9em; }
-
-        /* 팝업 지도 스타일 */
-        #map-tooltip {
-            display: none;
-            position: absolute;
-            width: 350px; height: 250px;
-            top: 100%; left: 50%;
-            transform: translateX(-50%);
-            border: 2px solid #4285F4; border-radius: 10px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-            z-index: 1000;
-            margin-top: 15px;
+        .container {
+            width: 100%; 
+            max-width: 100%; /* 제한 없이 꽉 채움 */
+            margin: 0 auto;
             background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* 헤더 영역 */
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 15px;
+        }
+        h2 { margin: 0; color: #333; }
+        
+        /* 날짜 입력 인풋 */
+        input[type="date"] {
+            padding: 8px 12px; font-size: 1rem; border: 1px solid #ddd; border-radius: 5px;
+            font-family: inherit; cursor: pointer;
+        }
+
+        /* 리스트 스타일 */
+        .log-list { list-style: none; padding: 0; margin: 0; }
+        .log-item {
+            display: flex; flex-wrap: wrap; align-items: center;
+            padding: 15px; border-bottom: 1px solid #eee;
+            transition: background-color 0.2s; position: relative;
+        }
+        .log-item:hover { background-color: #f0f7ff; }
+        .log-item:last-child { border-bottom: none; }
+
+        /* 리스트 내부 컬럼 */
+        .col-time { width: 150px; color: #666; font-size: 0.9em; }
+        .col-name { width: 100px; font-weight: bold; color: #4285F4; }
+        .col-address { flex: 1; font-size: 1.05em; color: #333; min-width: 200px; cursor: help; text-decoration: underline dotted #aaa; }
+        
+        /* 데이터 없음 메시지 */
+        .no-data { text-align: center; padding: 40px; color: #999; }
+
+        /* 툴팁 지도 스타일 */
+        #map-tooltip {
+            display: none; position: fixed; /* 화면 기준 고정 */
+            width: 320px; height: 220px;
+            border: 2px solid #4285F4; border-radius: 8px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+            background: white; z-index: 1000;
+            pointer-events: none; /* 지도가 마우스 이벤트 가로채지 않도록 */
         }
         
-        /* 툴팁 화살표 */
-        #map-tooltip::after {
-            content: ""; position: absolute; bottom: 100%; left: 50%; margin-left: -10px;
-            border-width: 10px; border-style: solid; border-color: transparent transparent #4285F4 transparent;
+        /* 모바일 대응 */
+        @media (max-width: 600px) {
+            .col-time { width: 100%; margin-bottom: 5px; font-size: 0.8em; }
+            .col-name { width: 100%; margin-bottom: 5px; }
+            .col-address { width: 100%; }
+            #map-tooltip { width: 250px; height: 180px; }
         }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2>🛠️ 관리자 모니터링</h2>
-        <p class="sub-text">가장 최근에 저장된 위치가 실시간으로 표시됩니다.</p>
-
-        <div id="result-container">
-            <p>최근 저장 위치 (마우스를 올려보세요):</p>
-            
-            <div style="position: relative; display: inline-block;">
-                <span id="address-display" class="address-text" onmouseenter="showMap()" onmouseleave="hideMap()">
-                    데이터를 기다리는 중...
-                </span>
-                
-                <div id="map-tooltip">
-                    <div id="map" style="width: 100%; height: 100%; border-radius: 8px;"></div>
-                </div>
+    <div class="container">
+        <header>
+            <h2>📋 위치 기록 모니터링</h2>
+            <div>
+                <input type="date" id="datePicker" onchange="loadDataByDate()">
             </div>
-            
-            <div id="timestamp-display" class="time-text">-</div>
-        </div>
+        </header>
+
+        <ul id="logList" class="log-list">
+            <li class="no-data">데이터를 불러오는 중입니다...</li>
+        </ul>
+    </div>
+
+    <div id="map-tooltip">
+        <div id="map" style="width: 100%; height: 100%;"></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -90,84 +113,132 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
+        
+        // 전역 변수로 저장 (다른 스크립트에서 접근 가능하도록)
+        window.dbRef = ref(db, 'locations');
+        window.dbQuery = query;
+        window.dbLimit = limitToLast;
+        window.dbOnValue = onValue;
 
-        // ★ Firebase에서 가장 최근 데이터 1개만 계속 감시(Listen)
-        const lastLocationQuery = query(ref(db, 'locations'), limitToLast(1));
-
-        onValue(lastLocationQuery, (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                // 데이터는 객체 형태(key: value)로 오므로 값을 추출
-                const keys = Object.keys(data);
-                const lastRecord = data[keys[0]];
-
-                updateDashboard(lastRecord);
-            }
-        });
-
-        // 화면 업데이트 함수
-        function updateDashboard(record) {
-            document.getElementById('address-display').innerText = record.address;
-            document.getElementById('timestamp-display').innerText = "저장 일시: " + record.timestamp;
-
-            // 전역 변수에 좌표 저장 (지도가 쓸 수 있게)
-            window.targetLat = record.latitude;
-            window.targetLng = record.longitude;
-        }
+        // 초기화: 오늘 날짜로 세팅하고 데이터 로드
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = ('0' + (today.getMonth() + 1)).slice(-2);
+        const day = ('0' + today.getDate()).slice(-2);
+        
+        document.getElementById('datePicker').value = `${year}-${month}-${day}`;
+        
+        // 모듈 로드 후 데이터 로딩 시작
+        loadDataByDate();
     </script>
 
     <script>
-        // 지도 관련 변수
         let map = null;
-        // window.targetLat / Lng 는 위의 모듈 스크립트에서 업데이트됩니다.
+        let allData = []; // 파이어베이스에서 가져온 전체 데이터 캐시
 
-        // 마우스 올렸을 때
-        function showMap() {
-            // 데이터가 없으면 무시
-            if (!window.targetLat || !window.targetLng) return;
+        // 데이터 로드 및 필터링 함수
+        function loadDataByDate() {
+            const dateInput = document.getElementById('datePicker').value; // YYYY-MM-DD
+            const listContainer = document.getElementById('logList');
+            
+            listContainer.innerHTML = '<li class="no-data">데이터 조회 중...</li>';
 
-            const tooltip = document.getElementById('map-tooltip');
-            tooltip.style.display = 'block';
-            
-            // 지도 초기화 또는 이동
-            initMap(window.targetLat, window.targetLng);
-            
-            // 지도 사이즈 재조정 (display:none 해제 직후 필수)
-            if (map) {
-                setTimeout(() => map.invalidateSize(), 10);
+            // Firebase 모듈이 로드될 때까지 약간의 지연이 있을 수 있음
+            if(!window.dbOnValue) {
+                setTimeout(loadDataByDate, 500);
+                return;
             }
-        }
 
-        // 마우스 뗐을 때
-        function hideMap() {
-            document.getElementById('map-tooltip').style.display = 'none';
-        }
+            // 최근 200개 데이터를 가져와서 클라이언트에서 날짜로 필터링 (간단한 구현을 위해)
+            const recentPostsQuery = window.dbQuery(window.dbRef, window.dbLimit(200));
 
-        // 지도 그리기 함수
-        function initMap(lat, lng) {
-            if (map) {
-                map.setView([lat, lng], 16);
-                
-                // 기존 마커들 제거
-                map.eachLayer((layer) => {
-                    if (layer instanceof L.Marker) {
-                        map.removeLayer(layer);
+            window.dbOnValue(recentPostsQuery, (snapshot) => {
+                const data = snapshot.val();
+                listContainer.innerHTML = ''; // 초기화
+
+                if (!data) {
+                    listContainer.innerHTML = '<li class="no-data">저장된 기록이 없습니다.</li>';
+                    return;
+                }
+
+                // 객체를 배열로 변환
+                let items = Object.values(data);
+
+                // 1. 날짜 필터링 (새로운 데이터 구조에 'date' 필드가 있다고 가정)
+                // 예전 데이터는 date 필드가 없을 수 있으므로 예외처리
+                let filteredItems = items.filter(item => {
+                    if (item.date) {
+                        return item.date === dateInput;
+                    } else {
+                        // date 필드가 없는 옛날 데이터는 timestamp 문자열로 대충 비교 (선택사항)
+                        return false; 
                     }
                 });
+
+                // 2. 최신순 정렬 (timestamp 기준 내림차순)
+                filteredItems.sort((a, b) => {
+                    return new Date(b.timestamp) - new Date(a.timestamp);
+                });
+
+                if (filteredItems.length === 0) {
+                    listContainer.innerHTML = '<li class="no-data">선택한 날짜의 기록이 없습니다.</li>';
+                    return;
+                }
+
+                // 3. 리스트 렌더링
+                filteredItems.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = 'log-item';
+                    
+                    // 마우스 이벤트 연결 (주소 부분에 올렸을 때)
+                    li.innerHTML = `
+                        <div class="col-time">${item.timestamp.split('오')[0] || item.timestamp}</div> 
+                        <div class="col-name">${item.name || '이름없음'}</div>
+                        <div class="col-address" 
+                             onmouseenter="showMap(event, ${item.latitude}, ${item.longitude})" 
+                             onmouseleave="hideMap()">
+                            ${item.address}
+                        </div>
+                    `;
+                    listContainer.appendChild(li);
+                });
+            });
+        }
+
+        // 지도 보여주기 (마우스 위치 근처에)
+        function showMap(e, lat, lng) {
+            const tooltip = document.getElementById('map-tooltip');
+            
+            // 툴팁 위치 설정 (마우스 커서 오른쪽 아래)
+            const x = e.clientX + 15;
+            const y = e.clientY + 15;
+            
+            // 화면 밖으로 나가는 것 방지 (간단 보정)
+            tooltip.style.left = Math.min(x, window.innerWidth - 330) + 'px';
+            tooltip.style.top = Math.min(y, window.innerHeight - 230) + 'px';
+            tooltip.style.display = 'block';
+
+            if (map) {
+                map.setView([lat, lng], 16);
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker) map.removeLayer(layer);
+                });
                 L.marker([lat, lng]).addTo(map);
+                map.invalidateSize();
             } else {
                 map = L.map('map', {
                     center: [lat, lng],
                     zoom: 16,
-                    zoomControl: false
+                    zoomControl: false,
+                    attributionControl: false
                 });
-                
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(map);
-
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
                 L.marker([lat, lng]).addTo(map);
             }
+        }
+
+        function hideMap() {
+            document.getElementById('map-tooltip').style.display = 'none';
         }
     </script>
 </body>
