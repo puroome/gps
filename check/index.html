@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>위치 기록</title>
+    <link rel="icon" href="../admin/favicon.png" type="image/png"> 
+    <style>
+        /* 기본 설정 & 폰트 */
+        body { 
+            font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; 
+            margin: 0; padding: 20px; 
+            background-color: #f5f7fa;
+            color: #333;
+            -webkit-user-select: none; 
+            user-select: none;
+            overscroll-behavior: none;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            padding: 30px 20px;
+            overflow: hidden;
+            min-height: 400px; 
+        }
+
+        header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px; }
+        
+        h2 { 
+            margin: 0; 
+            font-size: 1.5rem; 
+            font-weight: 800; 
+            color: #1a1a1a;
+            display: flex; align-items: center; justify-content: center; gap: 8px; 
+        }
+        
+        .today-date {
+            margin-top: 10px;
+            font-size: 1rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        /* 필터 컨트롤 제거됨 */
+
+        .log-list { list-style: none; padding: 0; margin: 0; }
+        .log-item {
+            padding: 20px 0; border-bottom: 1px solid #f0f0f0;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .log-item:last-child { border-bottom: none; }
+        
+        .item-header { display: flex; align-items: baseline; gap: 10px; }
+        .item-name { font-size: 1.1rem; font-weight: 700; color: #4285F4; }
+        .item-time { font-size: 0.95rem; color: #333; font-weight: 400; }
+        
+        .item-address {
+            font-size: 0.95rem; color: #666; background: #f9f9f9;
+            padding: 8px 12px; border-radius: 8px; cursor: pointer; 
+            line-height: 1.4; display: inline-block; width: fit-content;
+            transition: background 0.2s, color 0.2s;
+        }
+        .item-address:hover { background: #eef4ff; color: #4285F4; }
+        .item-address:active { background: #dceaff; }
+
+        .no-data { text-align: center; padding: 60px 20px; color: #999; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h2>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C7.58172 2 4 5.58172 4 10C4 14.4183 12 22 12 22C12 22 20 14.4183 20 10C20 5.58172 16.4183 2 12 2Z" fill="#FF3B30"/>
+                    <circle cx="12" cy="10" r="3" fill="white"/>
+                </svg>
+                위치 기록
+            </h2>
+            <div id="displayDate" class="today-date"></div>
+        </header>
+
+        <ul id="logList" class="log-list">
+            <li class="no-data">데이터를 불러오는 중입니다...</li>
+        </ul>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, query, limitToLast, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB-qu7Z0v_ygNbiKzT7tt6Byigp_AGcdPo",
+            authDomain: "gps1-cf085.firebaseapp.com",
+            databaseURL: "https://gps1-cf085-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "gps1-cf085",
+            storageBucket: "gps1-cf085.firebasestorage.app",
+            messagingSenderId: "407130432420",
+            appId: "1:407130432420:web:2f78b17a891bce1e6cd731"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        
+        window.dbRef = ref(db, 'locations');
+        window.dbQuery = query;
+        window.dbLimit = limitToLast;
+        window.dbOnValue = onValue;
+
+        startApp();
+    </script>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB-qu7Z0v_ygNbiKzT7tt6Byigp_AGcdPo&libraries=places"></script>
+
+    <script>
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+        let allData = [];
+        let geocoder;
+
+        window.onload = function() {
+            if (typeof google !== 'undefined') {
+                geocoder = new google.maps.Geocoder();
+            }
+            // 오늘 날짜 표시
+            const today = new Date();
+            const dateStr = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
+            document.getElementById('displayDate').innerText = dateStr;
+        };
+
+        function startApp() {
+            if(!window.dbOnValue) { setTimeout(startApp, 500); return; }
+            // 최근 300개 데이터를 가져와서 클라이언트 측에서 오늘 날짜로 필터링
+            const recentPostsQuery = window.dbQuery(window.dbRef, window.dbLimit(300));
+            window.dbOnValue(recentPostsQuery, (snapshot) => {
+                const data = snapshot.val();
+                allData = data ? Object.values(data) : [];
+                filterAndRender();
+            });
+        }
+
+        function filterAndRender() {
+            const listContainer = document.getElementById('logList');
+            if (allData.length === 0) {
+                listContainer.innerHTML = '<li class="no-data">오늘 기록이 없습니다.</li>';
+                return;
+            }
+            
+            // 오늘 날짜 구하기 (YYYY-MM-DD 포맷)
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const todayStr = `${yyyy}-${mm}-${dd}`;
+
+            setTimeout(() => {
+                let filtered = allData.filter(item => {
+                    let itemDateStr = item.date || item.timestamp;
+                    if(!itemDateStr) return false;
+                    
+                    let d = new Date(item.timestamp);
+                    if(isNaN(d)) { d = new Date(itemDateStr.substring(0, 10)); }
+                    
+                    // 로컬 시간 기준으로 YYYY-MM-DD 추출
+                    const itemYear = d.getFullYear();
+                    const itemMonth = String(d.getMonth() + 1).padStart(2, '0');
+                    const itemDay = String(d.getDate()).padStart(2, '0');
+                    const itemYMD = `${itemYear}-${itemMonth}-${itemDay}`;
+
+                    // 오늘 날짜와 일치하는지 확인
+                    return itemYMD === todayStr;
+                });
+
+                filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                if (filtered.length === 0) {
+                    listContainer.innerHTML = '<li class="no-data">오늘 기록이 없습니다.</li>';
+                    return;
+                }
+
+                listContainer.innerHTML = '';
+                filtered.forEach((item, index) => {
+                    const li = document.createElement('li');
+                    li.className = 'log-item';
+                    const dateObj = new Date(item.timestamp);
+                    const prettyDate = isNaN(dateObj) ? item.timestamp : 
+                        `${String(dateObj.getHours()).padStart(2,'0')}:${String(dateObj.getMinutes()).padStart(2,'0')}`; // 오늘 기록이므로 시간만 표시
+
+                    const uniqueId = `addr-${index}-${Date.now()}`;
+                    
+                    const isKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(item.address);
+                    const displayAddress = isKorean ? item.address : `📍 주소 변환 중... (${item.address || '위치정보'})`;
+                    const addressStyle = isKorean ? 'color:#333;' : 'color:#888;';
+
+                    li.innerHTML = `
+                        <div class="item-header">
+                            <span class="item-name">${item.name || '이름 없음'}</span>
+                            <span class="item-time">${prettyDate}</span>
+                        </div>
+                        <div class="item-address" 
+                            id="${uniqueId}"
+                            onclick="openKakaoMap(${item.latitude}, ${item.longitude})"
+                            title="클릭하여 카카오맵 열기">
+                            <span style="${addressStyle}">${displayAddress}</span>
+                        </div>
+                    `;
+                    listContainer.appendChild(li);
+
+                    if(!isKorean && item.latitude && item.longitude) {
+                        convertAddressWithGoogle(item.latitude, item.longitude, uniqueId);
+                    }
+                });
+            }, 100);
+        }
+
+        function convertAddressWithGoogle(lat, lng, elementId) {
+            if (!geocoder) return;
+
+            const latlng = { lat: parseFloat(lat), lng: parseFloat(lng) };
+            
+            geocoder.geocode({ location: latlng, language: 'ko' }, (results, status) => {
+                const el = document.getElementById(elementId);
+                if (!el) return;
+
+                const span = el.querySelector('span') || el;
+
+                if (status === "OK" && results[0]) {
+                    let addr = results[0].formatted_address;
+                    addr = addr.replace(/^대한민국\s/, '');
+
+                    let postalCode = "";
+                    const components = results[0].address_components;
+                    if (components) {
+                        for (let component of components) {
+                            if (component.types.includes("postal_code")) {
+                                postalCode = component.long_name;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (postalCode) addr += ` (${postalCode})`;
+
+                    span.innerText = addr;
+                    span.style.color = "#333";
+                } else {
+                    console.log("Geocoder failed: " + status);
+                }
+            });
+        }
+
+        window.openKakaoMap = function(lat, lng) {
+            if (!lat || !lng) {
+                alert('위치 정보가 없습니다.');
+                return;
+            }
+            const url = `https://map.kakao.com/link/map/${lat},${lng}`;
+            window.open(url, '_blank');
+        };
+    </script>
+</body>
+</html>
